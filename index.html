@@ -1,0 +1,276 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>reveal.js</title>
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/league.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/tomorrow-night-eighties.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+<style>
+.mine {
+    position: absolute;
+    top: 0%;
+    left: 0;
+}
+</style>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css?family=Roboto+Mono:100');
+                        .container {
+                              height: 100%;
+                              width: 100%;
+                              justify-content: center;
+                              align-items: left;
+                              display: flex;
+                        }
+                        .text {
+                            font-family: 'Roboto Mono', monospace;
+                            font-weight: 100;
+                            font-size: 28px;
+                            color: #FAFAFA;
+                          }
+                          .dud{
+                            font-family: 'Roboto Mono', monospace;
+                            color: #757575;
+                          }
+                    </style>
+                    <h1>
+                    PipelineTasks and Gen3 middleware
+                    </h1>
+                    <br/>
+                    <h2>
+                    <div class="container">
+                        From static to&nbsp;
+                        <div class="text"></div>
+                    </div>
+                    </h2>
+                     <script src="js/intro.js">
+                     </script>
+                </section>
+
+                <section>
+                    <h1>Caveats</h1>
+                    <ul>
+                        <li>This is a high level overview of PipeLineTasks and the accompanying middleware</li>
+                        <li>Not intended to be a tutorial</li>
+                        <li>Look for formal documentation to come</li>
+                        <li>The roadmap for the future will be discussed later on this afternoon</li>
+                    </ul>
+                </section>
+
+				<section>
+                    <h1>What is a PipelineTask?</h1>
+                    <ul>
+                    <li class="fragment">Input and output are configurable and introspectable</p>
+                    <li class="fragment">Have a defined unit of work</p>
+                    <li class="fragment">Have input and output handled through butler</p>
+                    <li class="fragment">This all enables an activator to run generic PipelineTasks</p>
+                    </ul>
+                </section>
+
+                <section>
+                    <h1>What makes a PipelineTask</h1>
+                        <section>
+                            <pre style="width: 80%; margin-left:auto; margin-right: auto; max-height:1300px">
+                                <code class="python" style="max-height:1100px;font-size:21pt;
+                                line-height: 1.1em;">
+class MergeDetectionsConfig(PipelineTaskConfig):
+...
+    catalogs = InputDatasetField(
+        doc="Detection Catalogs to be merged",
+        nameTemplate="{inputCoaddName}Coadd_det",
+        storageClass="SourceCatalog",
+        dimensions=("Tract", "Patch", "SkyMap", "AbstractFilter")
+    )
+
+    skyMap = InputDatasetField(
+        doc="SkyMap to be used in merging",
+        nameTemplate="{inputCoaddName}Coadd_skyMap",
+        storageClass="SkyMap",
+        dimensions=("SkyMap",),
+        scalar=True
+    )
+
+    outputCatalog = OutputDatasetField(
+        doc="Merged Detection catalog",
+        nameTemplate="{outputCoaddName}Coadd_mergeDet",
+        storageClass="SourceCatalog",
+        dimensions=("Tract", "Patch", "SkyMap"),
+        scalar=True
+    ...
+    def setDefaults(self):
+        ...
+        self.quantum.dimensions = ("Tract", "Patch", "SkyMap")
+        ...
+                                </code>
+                            </pre>
+                            <p>Config classes define the input and output datasets that a task will use,<br/>
+                            and the unit of data on which the processing occurs</p>
+                        </section>
+                        <section>
+                            <pre style="width: 90%; margin-left:auto; margin-right:auto; max-height:1300px">
+                                <code class="python" style="max-height:1300px;font-size:23pt;
+                                line-height: 1.4em; ">
+class MergeDetectionsTask(PipelineTask, CmdLineTask):
+...
+    def adaptArgsAndRun(self, inputData, inputDataIds, outputDataIds, butler):
+        packedId, maxBits = butler.registry.packDataId("TractPatch", inputDataIds["outputCatalog"])
+        inputData["skySeed"] = packedId
+        inputData["idFactory"] = afwTable.IdFactory.makeSource(packedId, 64 - maxBits)
+        catalogDict = {dataId['abstract_filter']: cat for dataId, cat in zip(inputDataIds['catalogs'],
+            inputData['catalogs'])}
+        inputData['catalogs'] = catalogDict
+        ...
+        return self.run(**inputData)
+
+    def run(self, catalogs, skyInfo, idFactory, skySeed):
+        ...
+        return Struct(outputCatalog=mergedList)
+                                </code>
+                            </pre>
+                            <p>Tasks define an entry point where input manipulation may happen,<br/> and the run
+                            method returns a struct matching the config's outputs</p>
+                        </section>
+                </section>
+
+                <section data-background-color=white>
+
+                    <script src="node_modules/d3/dist/d3.min.js"></script>
+                    <script src="node_modules/viz.js/viz.js" type="javascript/worker"></script>
+                    <script src="node_modules/d3-graphviz/build/d3-graphviz.min.js"></script>
+                    <div id="graph"></div>
+                    <div style="position: absolute; z-index: 100; bottom: 5px; left:5px; color: black;
+                        font-size:20pt;">
+                        Navigate with z and x keys</div>
+                    <script src="js/qgraph.js">
+                    </script>
+                </section>
+
+                <section>
+                    <h1>Running Pipeline Tasks</h1>
+                    <ul>
+                        <li class="fragment">Run using an activator</li>
+                        <li class="fragment">Many different types of activators</li>
+                        <li class="fragment">Can run any different number of tasks</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h1>Anatomy of "Laptop" activator command</h1>
+                    <pre>
+                        <code class="bash">
+pipetask -b $CI_HSC_DIR/DATA/butler.yaml -i input_collection -o output_collection -t mergeDetections.MergeDetectionsTask:mdt -C mdt:config_file 
+                        </code>
+                    </pre>
+                    <div style="height: 50px; width: 375px; border: 3px solid green; position:absolute; top:263px; left:270px;">
+                    </div>
+                    <div style="height: 50px; width: 220px; border: 3px solid #801900; position:absolute; top:263px; left:690px;">
+                    </div>
+                    <div style="height: 50px; width: 235px; border: 3px solid #4249a9; position:absolute; top:263px; left:955px;">
+                    </div>
+                    <div style="height: 50px; width: 467px; border: 3px solid #abb344; position:absolute; top:263px; left:1233px;">
+                    </div>
+                    <div style="height: 50px; width: 44px; border: 3px solid #008058; position:absolute; top:263px; left:1713px;">
+                    </div>
+                    <div style="height: 50px; width: 150px; border: 3px solid #b54f1c; position:absolute; top:263px; left:1859px;">
+                    </div>
+                    <div style="position:absolute; top:318px; left:375px; color: green;">Butler</div>
+                    <div style="position:absolute; top:208px; left:680px; color: #801900;">Input Location</div>
+                    <div style="position:absolute; top:318px; left:935px; color: #636ac7;">Output Location</div>
+                    <div style="position:absolute; top:208px; left:1408px; color: #abb344;">Task</div>
+                    <div style="position:absolute; top:318px; left:1689px; color: #008058;">Label</div>
+                    <div style="position:absolute; top:208px; left:1882px; color: #b54f1c;">Config</div>
+                </section>
+
+                <section>
+                    <h1>Full ci_hsc command</h1>
+                    <pre>
+                        <code class="bash">
+pipetask -d "Patch.patch = 69" -j 8 -b $CI_HSC_DIR/DATA/butler.yaml -p lsst.meas.base -p lsst.ip.isr -p lsst.pipe.tasks \
+-i 'raw','calib',ref/ps1_pv3_3pi_20170110,demo_collection_input -o demo_collection run --register-dataset-types \
+-t isrTask.IsrTask:isr -C isr:$DEMO_HSC_PIPELINETASK_DIR/config/isr.py \
+-t characterizeImage.CharacterizeImageTask:cit -C cit:$DEMO_HSC_PIPELINETASK_DIR/config/charImage.py \
+-t calibrate.CalibrateTask:ct -C ct:$DEMO_HSC_PIPELINETASK_DIR/config/calibrate.py \
+-t makeCoaddTempExp.MakeWarpTask:mwt -C mwt:$DEMO_HSC_PIPELINETASK_DIR/config/makeWarp.py \
+-t assembleCoadd.CompareWarpAssembleCoaddTask:cwact -C cwact:$DEMO_HSC_PIPELINETASK_DIR/config/compareWarpAssembleCoadd.py \
+-t multiBand.DetectCoaddSourcesTask \
+-t mergeDetections.MergeDetectionsTask:mdt -C mdt:$DEMO_HSC_PIPELINETASK_DIR/config/mergeDetections.py \
+-t deblendCoaddSourcesPipeline.DeblendCoaddSourcesSingleTask \
+-t multiBand.MeasureMergedCoaddSourcesTask:mmcst -C mmcst:$DEMO_HSC_PIPELINETASK_DIR/config/measureMerged.py \
+-t mergeMeasurements.MergeMeasurementsTask:mmt -C mmt:$DEMO_HSC_PIPELINETASK_DIR/config/mergeCoaddMeasurements.py \
+-t forcedPhotCcd.ForcedPhotCcdTask:fpccdt -C fpccdt:$DEMO_HSC_PIPELINETASK_DIR/config/forcedPhotCcd.py \
+-t forcedPhotCoadd.ForcedPhotCoaddTask:fpct -C fpct:$DEMO_HSC_PIPELINETASK_DIR/config/forcedPhotCoadd.py \
+                        </code>
+                    </pre>
+                </section>
+
+                <section>
+                    <h1>What's New</h1>
+                    <ul>
+                        <li class="fragment">Data associated with spatial regions for easy querying</li>
+                        <li class="fragment">Butler knows about dimensions other than direct observational dimensions</li>
+                        <li class="fragment">Much faster butler startup times!</li>
+                        <li class="fragment">Dynamic execution based on input constraints</li>
+                        <li class="fragment">More extensible to new file formats</li>
+                        <li class="fragment">Better provenance about exactly what was run (coming soon)</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h1>Advantages to the new system</h1>
+                    <ul>
+                        <li class="fragment">Easier task writing</li>
+                        <li class="fragment">Easier to run a series of data processing (less developer time)</li>
+                        <li class="fragment">Ability to query info about more metadata and relations</li>
+                        <li class="fragment">Ability to efficiently query what datasets are present given constraints</li>
+                        <li class="fragment">Visualization of pipeline flow to aid development</li>
+                        <li class="fragment">Easier to introduce and integrate new data-set types</li>
+                        <li class="fragment">Pipeline can be defined via configuration vs. hard coding specific tasks</li>
+                    </ul>
+                </section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+                transition: 'fade',
+                width:2200,
+                height: 1500,
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+				]
+			});
+            function stopDyn() {
+                con = false
+            }
+            Reveal.addEventListener('slidechanged', stopDyn);
+		</script>
+	</body>
+</html>
