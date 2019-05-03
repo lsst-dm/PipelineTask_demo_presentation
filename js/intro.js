@@ -66,7 +66,7 @@
 
                         var con = true;
                         
-                        const el = document.querySelector('.text')
+                        const el = document.querySelector('.fooBar')
                         const fx = new TextScramble(el)
                         
                         let counter = 0
